@@ -1,7 +1,12 @@
 package com.example.appplaymusic
 
-import android.net.LinkAddress
+import android.content.ContentValues.TAG
+import android.content.Context
+import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -15,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -31,32 +35,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.HorizontalAlignmentLine
-import androidx.compose.ui.layout.VerticalAlignmentLine
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSize
+import androidx.core.net.toUri
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
 import com.example.appplaymusic.ui.theme.AppPlayMusicTheme
-import org.intellij.lang.annotations.JdkConstants.HorizontalAlignment
+import okhttp3.ResponseBody
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.UUID
+
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalFoundationApi::class)
@@ -82,9 +86,12 @@ data class Album(
 
 data class Music(
     val name: String,
-    val music: Int,
+    val music: String,
     val cover: Int,
 )
+
+val BASE_URL =
+    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/musicForMusicApp/"
 
 @Composable
 fun MainScreen() {
@@ -93,7 +100,6 @@ fun MainScreen() {
         //horizontalArrangement = Arrangement.Center
     ) {
         ComposeComboBox()
-        //pacer(Modifier.height(10.dp))
     }
 }
 
@@ -103,33 +109,50 @@ fun ComposeComboBox() {
         mutableStateOf(false)
     }
 
-    var expandedMusic by remember {
-        mutableStateOf(false)
-    }
-
     val listAlbum = listOf(
         Album(
             "Album 1",
             listMusic = listOf(
-                Music("quanglong1", 1, 1),
-                Music("thaivi1", 2, 2),
-                Music("sonloc1", 3,4)
+                Music(
+                    "quanglong1",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui2043/Aoiharu-Misekai-10611368.mp3?st=CCs8VEZN_T3VDE3SBOzTPA&e=1709344586&download=true",
+                    1
+                ),
+                Music(
+                    "thaivi1",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui2052/UtaWoOshieteKuretaAnataE-Misekai-13812737.mp3?st=IxQEnq4lFd6y75QRTQxRhA&e=1709347318&download=true",
+                    2
+                ),
             )
         ),
         Album(
             "Album 2",
             listMusic = listOf(
-                Music("quanglong2", 1, 1),
-                Music("thaivi2", 2, 2),
-                Music("sonloc2", 3,4)
+                Music(
+                    "quanglong2",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui2048/HoaiMong-KhaNguyenTrongTai-12652247.mp3?st=Y2P-Ejl493KL1K6hPxvqPg&e=1709041678&t=1708440712270",
+                    1
+                ),
+                Music(
+                    "thaivi2",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui887/FlyersDeathParadeOpening-Bradio-3801236.mp3?st=AIyjbMnIM3DxtRTaxe4b9w&e=1709349740&download=true",
+                    2
+                ),
             )
         ),
         Album(
             "Album 3",
             listMusic = listOf(
-                Music("quanglong3", 1, 1),
-                Music("thaivi3", 2, 2),
-                Music("sonloc3", 3,4)
+                Music(
+                    "quanglong3",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui2052/NewWorld-Misekai-13812733.mp3?st=FJ6O74Tr0WApWICdVK7YYA&e=1709347279&download=true",
+                    1
+                ),
+                Music(
+                    "thaivi3",
+                    "https://c1-ex-swe.nixcdn.com/NhacCuaTui2036/Suzume-RADWIMPSToaka-7990784.mp3?st=Bp_VK-RRiDVstcbfVLr7fA&e=1709349826&download=true",
+                    2
+                ),
             )
         )
     )
@@ -138,9 +161,12 @@ fun ComposeComboBox() {
         mutableStateOf(listAlbum[0])
     }
 
-
     var selectedItemMusic by remember {
         mutableStateOf(listAlbum[0].listMusic[0])
+    }
+
+    var playMusic by remember {
+        mutableStateOf(false)
     }
 
     val icon = if (expandedAblum) {
@@ -149,15 +175,21 @@ fun ComposeComboBox() {
         Icons.Filled.KeyboardArrowDown
     }
 
-    val localUriHandler = LocalUriHandler.current
+    val iconPlay = if (playMusic) {
+        R.drawable.ic_pause
+    } else {
+        R.drawable.ic_play
+    }
+
+    val mContext = LocalContext.current
+    var mMediaPlayer: MediaPlayer
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .padding(20.dp)
-                //.clickable { expandedAblum = !expandedAblum }
         ) {
-            Box{
+            Box {
                 Row {
                     Text(
                         text = selectedItem.nameAlbum,
@@ -165,7 +197,13 @@ fun ComposeComboBox() {
                         textAlign = TextAlign.Center,
                         style = TextStyle(fontWeight = FontWeight.Bold)
                     )
-                    Icon(icon, contentDescription = "",Modifier.clickable {expandedAblum = !expandedAblum  }.size(40.dp))
+                    Icon(
+                        icon,
+                        contentDescription = "",
+                        Modifier
+                            .clickable { expandedAblum = !expandedAblum }
+                            .size(40.dp)
+                    )
 
                     DropdownMenu(
                         expanded = expandedAblum,
@@ -192,13 +230,68 @@ fun ComposeComboBox() {
 
             Spacer(modifier = Modifier.height(20.dp))
 
+
+
             selectedItem.listMusic.forEach {
+
                 Row {
                     Text(text = it.name)
-                    Image(painterResource(id =R.drawable.ic_download), contentDescription = "", Modifier.clickable {
-                        localUriHandler.openUri("https:\\/\\/c3-ex-swe.nct.vn\\/NhacCuaTui2048\\/HoaiMong-KhaNguyenTrongTai-12652247.mp3?st=Y2P-Ejl493KL1K6hPxvqPg&e=1709041678&t=1708440712270&download=true&fbclid=IwAR1AVbspj-b9KmGk90LJ8zTViSVOujEjko5MblpcoTOh38ohvm8mGRnxqe0")
-                    })
-                    Image(painterResource(id =R.drawable.ic_play), contentDescription = "")
+                    Image(painterResource(id = R.drawable.ic_download),
+                        contentDescription = "",
+                        Modifier.clickable {
+                            val downloadService = Retrofit.Builder()
+                                .baseUrl("https://c1-ex-swe.nixcdn.com/NhacCuaTui2048/")
+                                .build().create(Download_Service::class.java)
+
+                            val call: Call<ResponseBody> =
+                                downloadService.downloadFileWithFixedUrl(it.music)
+
+                            call.enqueue(object : Callback<ResponseBody> {
+                                override fun onResponse(
+                                    call: Call<ResponseBody?>?,
+                                    response: Response<ResponseBody?>
+                                ) {
+                                    if (response.isSuccessful) {
+                                        Log.d(TAG, "server contacted and has file")
+                                        val writtenToDisk: Boolean =
+                                            response.body()
+                                                ?.let { it1 ->
+                                                    writeResponseBodyToDisk(
+                                                        it1,
+                                                        it.name
+                                                    )
+                                                } == true
+                                        Log.d(TAG, "file download was a success? $writtenToDisk")
+                                    } else {
+                                        Log.d(TAG, "server contact failed")
+                                    }
+                                }
+
+                                override fun onFailure(call: Call<ResponseBody?>?, t: Throwable?) {
+                                    Log.e(TAG, "error")
+                                }
+                            })
+                        }
+                    )
+
+                    if (File("$BASE_URL${it.name}.mp3").exists()) {
+                        mMediaPlayer = MediaPlayer.create(
+                            mContext,
+                            (BASE_URL + it.name + ".mp3").toUri()
+                        )
+                        Image(painterResource(id = iconPlay),
+                            contentDescription = "",
+                            Modifier.clickable {
+
+                                playMusic = !playMusic
+                                if (playMusic) {
+                                    mMediaPlayer.start()
+                                } else {
+                                    mMediaPlayer.pause()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -206,6 +299,46 @@ fun ComposeComboBox() {
     }
 }
 
+private fun writeResponseBodyToDisk(body: ResponseBody, fileName: String): Boolean {
+    return try {
+        // todo change the file location/name according to your needs
+        if (!File(BASE_URL).exists()) {
+            File(BASE_URL).mkdir()
+        }
+
+        val futureStudioIconFile: File =
+            File("$BASE_URL$fileName.mp3")
+
+        var inputStream: InputStream? = null
+        var outputStream: OutputStream? = null
+        try {
+            val fileReader = ByteArray(4096)
+            val fileSize = body.contentLength()
+            var fileSizeDownloaded: Long = 0
+            inputStream = body.byteStream()
+            outputStream = FileOutputStream(futureStudioIconFile)
+            while (true) {
+                val read = inputStream.read(fileReader)
+                if (read == -1) {
+                    break
+                }
+                outputStream.write(fileReader, 0, read)
+                fileSizeDownloaded += read.toLong()
+                Log.d(TAG, "file download: $fileSizeDownloaded of $fileSize")
+            }
+            outputStream.flush()
+            true
+        } catch (e: IOException) {
+            false
+        } finally {
+            inputStream?.close()
+            outputStream?.close()
+        }
+
+    } catch (e: IOException) {
+        false
+    }
+}
 
 @Preview(showBackground = true)
 @Composable
