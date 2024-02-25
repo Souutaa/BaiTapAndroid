@@ -1,15 +1,12 @@
 package com.example.appplaymusic
 
 import android.content.ContentValues.TAG
-import android.content.Context
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -32,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,11 +57,10 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.UUID
 
 
 class MainActivity : ComponentActivity() {
-    @OptIn(ExperimentalFoundationApi::class)
+    private lateinit var player: ExoPlayer
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -72,7 +69,8 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen()
+                    player = ExoPlayer.Builder(this).build()
+                    MainScreen(player)
                 }
             }
         }
@@ -94,17 +92,17 @@ val BASE_URL =
     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/musicForMusicApp/"
 
 @Composable
-fun MainScreen() {
+fun MainScreen(player: ExoPlayer) {
     Column(
         modifier = Modifier.fillMaxSize(),
         //horizontalArrangement = Arrangement.Center
     ) {
-        ComposeComboBox()
+        ComposeComboBox(player)
     }
 }
 
 @Composable
-fun ComposeComboBox() {
+fun ComposeComboBox(player: ExoPlayer) {
     var expandedAblum by remember {
         mutableStateOf(false)
     }
@@ -175,14 +173,16 @@ fun ComposeComboBox() {
         Icons.Filled.KeyboardArrowDown
     }
 
-    val iconPlay = if (playMusic) {
-        R.drawable.ic_pause
-    } else {
-        R.drawable.ic_play
+    LaunchedEffect(key1 = selectedItem ) {
+        for (i in 0..selectedItem.listMusic.size - 1) {
+            if (File("$BASE_URL${selectedItem.listMusic[i].name}.mp3").exists()) {
+                player.addMediaItem(MediaItem.fromUri(Uri.parse("$BASE_URL${selectedItem.listMusic[i].name}.mp3")))
+            } else {
+                player.addMediaItem(MediaItem.fromUri(""))
+            }
+        }
     }
-
-    val mContext = LocalContext.current
-    var mMediaPlayer: MediaPlayer
+    player.prepare();
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -229,11 +229,7 @@ fun ComposeComboBox() {
             Text(text = "MP3 Player", color = Color.Red)
 
             Spacer(modifier = Modifier.height(20.dp))
-
-
-
-            selectedItem.listMusic.forEach {
-
+            selectedItem.listMusic.forEachIndexed {index, it ->
                 Row {
                     Text(text = it.name)
                     Image(painterResource(id = R.drawable.ic_download),
@@ -275,19 +271,17 @@ fun ComposeComboBox() {
                     )
 
                     if (File("$BASE_URL${it.name}.mp3").exists()) {
-                        mMediaPlayer = MediaPlayer.create(
-                            mContext,
-                            (BASE_URL + it.name + ".mp3").toUri()
-                        )
-                        Image(painterResource(id = iconPlay),
+                        Image(painterResource(id = R.drawable.ic_play),
                             contentDescription = "",
                             Modifier.clickable {
-
                                 playMusic = !playMusic
                                 if (playMusic) {
-                                    mMediaPlayer.start()
+                                    player.clearMediaItems();
+                                    player.addMediaItem(MediaItem.fromUri(Uri.parse("$BASE_URL${it.name}.mp3")))
+                                    player.seekTo(0, 0)
+                                    player.play()
                                 } else {
-                                    mMediaPlayer.pause()
+                                    player.pause()
                                 }
                             }
                         )
@@ -344,6 +338,5 @@ private fun writeResponseBodyToDisk(body: ResponseBody, fileName: String): Boole
 @Composable
 fun GreetingPreview() {
     AppPlayMusicTheme {
-
     }
 }
